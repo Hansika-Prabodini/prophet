@@ -94,12 +94,18 @@ def warm_start_params(m):
     res = {}
     for pname in ['k', 'm', 'sigma_obs']:
         if m.mcmc_samples == 0:
+            # For MAP estimation, scalar parameters have shape (1, 1)
             res[pname] = m.params[pname][0][0]
         else:
+            # For MCMC sampling, scalar parameters are flattened to shape (N,)
+            # so we take the mean directly
             res[pname] = np.mean(m.params[pname])
     for pname in ['delta', 'beta']:
         if m.mcmc_samples == 0:
+            # For MAP estimation, array parameters have shape (1, N)
             res[pname] = m.params[pname][0]
         else:
+            # For MCMC sampling, array parameters have shape (N, M)
+            # so we take the mean along axis 0
             res[pname] = np.mean(m.params[pname], axis=0)
     return res

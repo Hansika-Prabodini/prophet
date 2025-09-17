@@ -163,7 +163,7 @@ class CmdStanPyBackend(IStanBackend):
 
         for par in params:
             s = params[par].shape
-            if s[1] == 1:
+            if len(s) >= 2 and s[1] == 1:
                 params[par] = params[par].reshape((s[0],))
 
             if par in ['delta', 'beta'] and len(s) < 2:

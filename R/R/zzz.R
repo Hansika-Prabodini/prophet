@@ -31,7 +31,17 @@
       envir=prophet_model_env
     )
   },
-  error = function(cond) {}
+  error = function(cond) {
+    warning(
+      "Failed to load Prophet Stan model. Some Prophet functionality may not be available.\n",
+      "Error details: ", conditionMessage(cond),
+      call. = FALSE
+    )
+    # Log the error for debugging purposes
+    message("Prophet model loading error occurred in .onLoad():")
+    message("  Original error: ", conditionMessage(cond))
+    message("  This may affect forecasting capabilities.")
+  }
   )
 }
 

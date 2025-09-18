@@ -7,7 +7,7 @@ import os
 import platform
 from pathlib import Path
 from shutil import copy, copytree, rmtree
-from typing import List
+from typing import List, Optional
 import tempfile
 
 from setuptools import find_packages, setup, Extension
@@ -54,7 +54,7 @@ def prune_cmdstan(cmdstan_dir: str) -> None:
     temp_dir.rename(original_dir)
 
 
-def repackage_cmdstan():
+def repackage_cmdstan() -> bool:
     return os.environ.get("PROPHET_REPACKAGE_CMDSTAN", "").lower() not in ["false", "0"]
 
 
@@ -76,7 +76,7 @@ def maybe_install_cmdstan_toolchain() -> bool:
         cmdstanpy.utils.cxx_toolchain_path()
         return True
 
-def install_cmdstan_deps(cmdstan_dir: Path):
+def install_cmdstan_deps(cmdstan_dir: Path) -> None:
     import cmdstanpy
     from multiprocessing import cpu_count
 
@@ -98,7 +98,7 @@ def install_cmdstan_deps(cmdstan_dir: Path):
             raise RuntimeError("CmdStan failed to install in repackaged directory")
 
 
-def build_cmdstan_model(target_dir):
+def build_cmdstan_model(target_dir: str) -> None:
     """
     Rebuild cmdstan in the build environment, then use this installation to compile the stan model.
     The stan model is copied to {target_dir}/prophet_model.bin
@@ -142,7 +142,7 @@ def get_backends_from_env() -> List[str]:
     return os.environ.get("STAN_BACKEND", "CMDSTANPY").split(",")
 
 
-def build_models(target_dir):
+def build_models(target_dir: str) -> None:
     print("Compiling cmdstanpy model")
     build_cmdstan_model(target_dir)
 
@@ -153,7 +153,7 @@ def build_models(target_dir):
 class BuildPyCommand(build_py):
     """Custom build command to pre-compile Stan models."""
 
-    def run(self):
+    def run(self) -> None:
         if not self.dry_run:
             target_dir = os.path.join(self.build_lib, MODEL_TARGET_DIR)
             self.mkpath(target_dir)
@@ -162,17 +162,17 @@ class BuildPyCommand(build_py):
         build_py.run(self)
 
 
-class BuildExtCommand(build_ext):
+class BuildExtCommand(build_ext):  # type: ignore
     """Ensure built extensions are added to the correct path in the wheel."""
 
-    def run(self):
+    def run(self) -> None:
         pass
 
 
 class EditableWheel(editable_wheel):
     """Custom develop command to pre-compile Stan models in-place."""
 
-    def run(self):
+    def run(self) -> None:
         if not self.dry_run:
             target_dir = os.path.join(self.project_dir, MODEL_TARGET_DIR)
             self.mkpath(target_dir)
@@ -181,12 +181,12 @@ class EditableWheel(editable_wheel):
         editable_wheel.run(self)
 
 
-class BDistWheelABINone(bdist_wheel):
-    def finalize_options(self):
+class BDistWheelABINone(bdist_wheel):  # type: ignore
+    def finalize_options(self) -> None:
         bdist_wheel.finalize_options(self)
         self.root_is_pure = False
 
-    def get_tag(self):
+    def get_tag(self) -> tuple:
         _, _, plat = bdist_wheel.get_tag(self)
         return "py3", "none", plat
 
@@ -196,7 +196,7 @@ here = Path(__file__).parent.resolve()
 with open(here / "prophet" / "__version__.py", "r") as f:
     exec(f.read(), about)
 
-setup(
+setup(  # type: ignore
     version=about["__version__"],
     packages=find_packages(),
     zip_safe=False,

@@ -27,7 +27,7 @@ TBB_PARENT = "stan/lib/stan_math/lib"
 TBB_DIRS = ["tbb", "tbb_2020.3"]
 
 
-IS_WINDOWS = platform.platform().startswith("Win")
+IS_WINDOWS = platform.system() == "Windows"
 
 def prune_cmdstan(cmdstan_dir: str) -> None:
     """
@@ -166,7 +166,9 @@ class BuildExtCommand(build_ext):
     """Ensure built extensions are added to the correct path in the wheel."""
 
     def run(self):
-        pass
+        # Delegate to the base class to ensure any extensions are built and
+        # placed in the correct location for the wheel.
+        build_ext.run(self)
 
 
 class EditableWheel(editable_wheel):

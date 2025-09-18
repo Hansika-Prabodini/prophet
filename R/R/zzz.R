@@ -31,8 +31,9 @@
       envir=prophet_model_env
     )
   },
-  error = function(cond) {}
-  )
+  error = function(cond) {
+    # Handle the error condition here
+  }
 }
 
 # IMPORTS ----

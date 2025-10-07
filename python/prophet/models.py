@@ -108,47 +108,85 @@ class CmdStanPyBackend(IStanBackend):
         model_file = importlib_resources.files("prophet") / "stan_model" / "prophet_model.bin"
         return cmdstanpy.CmdStanModel(exe_file=str(model_file))
 
-    def fit(self, stan_init, stan_data, **kwargs):
+    def fit(self, stan_init, stan_data, **kwargs) -> dict:
+        """Fit the model using optimization.
+        
+        Args:
+            stan_init: Initial parameter values
+            stan_data: Input data for the model
+            **kwargs: Additional arguments passed to the optimizer
+            
+        Returns:
+            Dictionary of optimized parameters
+        """
+        # Handle custom initialization
         if 'inits' not in kwargs and 'init' in kwargs:
             stan_init = self.sanitize_custom_inits(stan_init, kwargs['init'])
             del kwargs['init']
 
         inits_list, data_list = self.prepare_data(stan_init, stan_data)
+        
+        # Choose algorithm based on data size
+        small_data_threshold = 100
+        default_iterations = 10000
+        
         args = dict(
             data=data_list,
             inits=inits_list,
-            algorithm='Newton' if data_list['T'] < 100 else 'LBFGS',
-            iter=int(1e4),
+            algorithm='Newton' if data_list['T'] < small_data_threshold else 'LBFGS',
+            iter=default_iterations,
         )
         args.update(kwargs)
 
         try:
             self.stan_fit = self.model.optimize(**args)
         except RuntimeError as e:
-            # Fall back on Newton
+            # Fall back on Newton if L-BFGS fails
             if not self.newton_fallback or args['algorithm'] == 'Newton':
-                raise e
-            logger.warning('Optimization terminated abnormally. Falling back to Newton.')
+                raise RuntimeError(
+                    f"Optimization failed with algorithm {args['algorithm']}"
+                ) from e
+            logger.warning(
+                'Optimization terminated abnormally. Falling back to Newton algorithm.'
+            )
             args['algorithm'] = 'Newton'
             self.stan_fit = self.model.optimize(**args)
+            
         params = self.stan_to_dict_numpy(
-            self.stan_fit.column_names, self.stan_fit.optimized_params_np)
+            self.stan_fit.column_names, self.stan_fit.optimized_params_np
+        )
         for par in params:
             params[par] = params[par].reshape((1, -1))
         return params
 
     def sampling(self, stan_init, stan_data, samples, **kwargs) -> dict:
+        """Generate posterior samples using MCMC.
+        
+        Args:
+            stan_init: Initial parameter values
+            stan_data: Input data for the model
+            samples: Total number of samples to generate (across all chains)
+            **kwargs: Additional arguments passed to the sampler
+            
+        Returns:
+            Dictionary of parameter samples
+        """
+        # Handle custom initialization
         if 'inits' not in kwargs and 'init' in kwargs:
             stan_init = self.sanitize_custom_inits(stan_init, kwargs['init'])
             del kwargs['init']
 
         inits_list, data_list = self.prepare_data(stan_init, stan_data)
+        
+        default_chains = 4
         args = dict(
             data=data_list,
             inits=inits_list,
         )
         if 'chains' not in kwargs:
-            kwargs['chains'] = 4
+            kwargs['chains'] = default_chains
+        
+        # Split samples between warmup and sampling
         iter_half = samples // 2
         kwargs['iter_sampling'] = iter_half
         if 'iter_warmup' not in kwargs:
@@ -157,10 +195,11 @@ class CmdStanPyBackend(IStanBackend):
 
         self.stan_fit = self.model.sample(**args)
         res = self.stan_fit.draws()
-        (samples, c, columns) = res.shape
-        res = res.reshape((samples * c, columns))
+        (n_samples, n_chains, n_columns) = res.shape
+        res = res.reshape((n_samples * n_chains, n_columns))
         params = self.stan_to_dict_numpy(self.stan_fit.column_names, res)
 
+        # Reshape parameters to match expected output format
         for par in params:
             s = params[par].shape
             if s[1] == 1:
@@ -172,9 +211,10 @@ class CmdStanPyBackend(IStanBackend):
         return params
 
     def cleanup(self):
+        """Clean up temporary files created during model fitting."""
         import cmdstanpy
         
-        if hasattr(self, "stan_fit"):
+        if hasattr(self, "stan_fit") and self.stan_fit is not None:
             fit_result: cmdstanpy.CmdStanMLE | cmdstanpy.CmdStanMCMC = self.stan_fit
             to_remove = (
                 fit_result.runset.csv_files + 
@@ -183,28 +223,58 @@ class CmdStanPyBackend(IStanBackend):
                 fit_result.runset.profile_files
             )
             for fpath in to_remove:
-                if pathlib.Path(fpath).is_file():
-                    pathlib.Path(fpath).unlink()
+                file_path = pathlib.Path(fpath)
+                if file_path.is_file():
+                    try:
+                        file_path.unlink()
+                    except OSError as e:
+                        logger.warning(f'Failed to remove temporary file {fpath}: {e}')
                 
     @staticmethod
+    @staticmethod
     def sanitize_custom_inits(default_inits, custom_inits):
-        """Validate that custom inits have the correct type and shape, otherwise use defaults."""
+        """Validate that custom inits have the correct type and shape, otherwise use defaults.
+        
+        Args:
+            default_inits: Dictionary of default initialization values
+            custom_inits: Dictionary of custom initialization values to validate
+            
+        Returns:
+            Dictionary of sanitized initialization values
+        """
         sanitized = {}
         for param in ['k', 'm', 'sigma_obs']:
             try:
                 sanitized[param] = float(custom_inits.get(param))
-            except Exception:
+            except (TypeError, ValueError, KeyError) as e:
+                logger.debug(f'Using default value for {param}: {e}')
                 sanitized[param] = default_inits[param]
         for param in ['delta', 'beta']:
-            if default_inits[param].shape == custom_inits[param].shape:
-                sanitized[param] = custom_inits[param]
-            else:
+            try:
+                if default_inits[param].shape == custom_inits[param].shape:
+                    sanitized[param] = custom_inits[param]
+                else:
+                    logger.warning(
+                        f'Shape mismatch for {param}: expected {default_inits[param].shape}, '
+                        f'got {custom_inits[param].shape}. Using default.'
+                    )
+                    sanitized[param] = default_inits[param]
+            except (AttributeError, KeyError):
+                logger.debug(f'Using default value for {param}')
                 sanitized[param] = default_inits[param]
         return sanitized
 
     @staticmethod
     def prepare_data(init, data) -> Tuple[dict, dict]:
-        """Converts np.ndarrays to lists that can be read by cmdstanpy."""
+        """Convert numpy arrays to lists that can be read by cmdstanpy.
+        
+        Args:
+            init: Dictionary of initial parameter values
+            data: Dictionary of input data
+            
+        Returns:
+            Tuple of (initialization dict, data dict) formatted for cmdstanpy
+        """
         cmdstanpy_data = {
             'T': data['T'],
             'S': data['S'],
@@ -231,17 +301,30 @@ class CmdStanPyBackend(IStanBackend):
         return (cmdstanpy_init, cmdstanpy_data)
 
     @staticmethod
-    def stan_to_dict_numpy(column_names: Tuple[str, ...], data: 'np.array'):
+    def stan_to_dict_numpy(column_names: Tuple[str, ...], data: 'np.array') -> OrderedDict:
+        """Convert Stan output columns to dictionary of numpy arrays.
+        
+        Args:
+            column_names: Tuple of column names from Stan output
+            data: Numpy array of parameter values
+            
+        Returns:
+            OrderedDict mapping parameter names to numpy arrays
+            
+        Raises:
+            RuntimeError: If duplicate column names are found
+        """
         import numpy as np
 
         output = OrderedDict()
 
         prev = None
-
         start = 0
         end = 0
         two_dims = len(data.shape) > 1
+        
         for cname in column_names:
+            # Parse parameter name from column name
             parsed = cname.split(".") if "." in cname else cname.split("[")
             curr = parsed[0]
             if prev is None:
@@ -250,7 +333,7 @@ class CmdStanPyBackend(IStanBackend):
             if curr != prev:
                 if prev in output:
                     raise RuntimeError(
-                        "Found repeated column name"
+                        f"Found repeated column name: {prev}"
                     )
                 if two_dims:
                     output[prev] = np.array(data[:, start:end])
@@ -259,9 +342,11 @@ class CmdStanPyBackend(IStanBackend):
                 prev = curr
                 start = end
             end += 1
+            
+        # Add final parameter
         if prev in output:
             raise RuntimeError(
-                "Found repeated column name"
+                f"Found repeated column name: {prev}"
             )
         if two_dims:
             output[prev] = np.array(data[:, start:end])

@@ -63,10 +63,13 @@ def maybe_install_cmdstan_toolchain() -> bool:
     """Install C++ compilers required to build stan models on Windows machines."""
     import cmdstanpy
 
+    logger = logging.getLogger(__name__)
+
     try:
         cmdstanpy.utils.cxx_toolchain_path()
         return False
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Failed to resolve C++ toolchain path, will attempt installation: {str(e)}")
         try:
             from cmdstanpy.install_cxx_toolchain import run_rtools_install
         except ImportError:

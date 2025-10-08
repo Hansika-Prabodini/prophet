@@ -25,10 +25,57 @@ CMDSTAN_VERSION = "2.33.1"
 BINARIES_DIR = "bin"
 BINARIES = ["diagnose", "print", "stanc", "stansummary"]
 TBB_PARENT = "stan/lib/stan_math/lib"
-TBB_DIRS = ["tbb", "tbb_2020.3"]
 
 
 IS_WINDOWS = platform.platform().startswith("Win")
+
+
+def discover_tbb_dirs(cmdstan_dir: str) -> List[str]:
+    """
+    Dynamically discover TBB directories in the CmdStan installation.
+    
+    This function scans the TBB parent directory for any directories starting with 'tbb',
+    making the build process robust to changes in CmdStan's TBB version or structure.
+    
+    Parameters
+    ----------
+    cmdstan_dir: Path to the CmdStan installation directory.
+    
+    Returns
+    -------
+    List of TBB directory names found in the CmdStan installation.
+    If the TBB parent directory doesn't exist, returns an empty list.
+    """
+    cmdstan_path = Path(cmdstan_dir).resolve()
+    tbb_parent_path = cmdstan_path / TBB_PARENT
+    
+    if not tbb_parent_path.exists():
+        logging.warning(
+            f"TBB parent directory not found at {tbb_parent_path}. "
+            "No TBB directories will be copied."
+        )
+        return []
+    
+    # Find all directories starting with 'tbb'
+    tbb_dirs = []
+    try:
+        for item in tbb_parent_path.iterdir():
+            if item.is_dir() and item.name.startswith("tbb"):
+                tbb_dirs.append(item.name)
+        
+        if tbb_dirs:
+            logging.info(f"Discovered TBB directories: {tbb_dirs}")
+        else:
+            logging.warning(
+                f"No TBB directories found in {tbb_parent_path}. "
+                "This may cause runtime issues if TBB is required."
+            )
+    except Exception as e:
+        logging.error(f"Error discovering TBB directories: {e}")
+        return []
+    
+    return sorted(tbb_dirs)
+
 
 def prune_cmdstan(cmdstan_dir: str) -> None:
     """
@@ -48,8 +95,18 @@ def prune_cmdstan(cmdstan_dir: str) -> None:
             rmtree(f)
         elif f.is_file() and f.stem not in BINARIES:
             os.remove(f)
-    for tbb_dir in TBB_DIRS:
-        copytree(original_dir / TBB_PARENT / tbb_dir, temp_dir / TBB_PARENT / tbb_dir)
+    
+    # Dynamically discover and copy TBB directories
+    tbb_dirs = discover_tbb_dirs(original_dir)
+    for tbb_dir in tbb_dirs:
+        src_path = original_dir / TBB_PARENT / tbb_dir
+        dest_path = temp_dir / TBB_PARENT / tbb_dir
+        try:
+            copytree(src_path, dest_path)
+            print(f"Copied TBB directory: {tbb_dir}")
+        except Exception as e:
+            logging.error(f"Failed to copy TBB directory {tbb_dir}: {e}")
+            raise
 
     rmtree(original_dir)
     temp_dir.rename(original_dir)

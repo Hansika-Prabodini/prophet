@@ -19,21 +19,80 @@
 
 -----
 
+## Table of Contents
+
+- [About Prophet](#about-prophet)
+- [Key Features](#key-features)
+- [Quick Start](#quick-start)
+- [Installation](#installation)
+  - [Python](#installation-in-python---pypi-release)
+  - [R](#installation-in-r---cran)
+- [Building from Source](#building-from-source)
+- [Docker Usage](#docker-usage)
+- [Documentation](#important-links)
+- [Contributing](#contributing)
+- [Changelog](#changelog)
+- [License](#license)
+
+## About Prophet
+
 Prophet is a procedure for forecasting time series data based on an additive model where non-linear trends are fit with yearly, weekly, and daily seasonality, plus holiday effects. It works best with time series that have strong seasonal effects and several seasons of historical data. Prophet is robust to missing data and shifts in the trend, and typically handles outliers well.
 
 Prophet is [open source software](https://code.facebook.com/projects/) released by Facebook's [Core Data Science team](https://research.fb.com/category/data-science/). It is available for download on [CRAN](https://cran.r-project.org/package=prophet) and [PyPI](https://pypi.python.org/pypi/prophet/).
 
-## Important links
+## Key Features
 
-- Homepage: https://facebook.github.io/prophet/
-- HTML documentation: https://facebook.github.io/prophet/docs/quick_start.html
-- Issue tracker: https://github.com/facebook/prophet/issues
-- Source code repository: https://github.com/facebook/prophet
-- Contributing: https://facebook.github.io/prophet/docs/contributing.html
-- Prophet R package: https://cran.r-project.org/package=prophet
-- Prophet Python package: https://pypi.python.org/pypi/prophet/
-- Release blogpost: https://research.facebook.com/blog/2017/2/prophet-forecasting-at-scale/
-- Prophet paper: Sean J. Taylor, Benjamin Letham (2018) Forecasting at scale. The American Statistician 72(1):37-45 (https://peerj.com/preprints/3190.pdf).
+- **Accurate and fast**: Prophet is used at Facebook for forecasting in various products and has shown good accuracy on a wide range of problems.
+- **Fully automatic**: Get reasonable forecasts without manual effort on model tuning.
+- **Tunable forecasts**: Easily adjust forecasts with domain knowledge through adjustable parameters.
+- **Available in R and Python**: Choose your preferred data science language.
+- **Handles missing data**: Robust to missing observations and outliers.
+- **Seasonal components**: Models yearly, weekly, daily seasonality and holiday effects.
+
+## Quick Start
+
+### Python
+
+```python
+from prophet import Prophet
+import pandas as pd
+
+# Load your data (must have 'ds' and 'y' columns)
+df = pd.read_csv('example_data.csv')
+df['ds'] = pd.to_datetime(df['ds'])
+
+# Create and fit the model
+m = Prophet()
+m.fit(df)
+
+# Make future dataframe for predictions
+future = m.make_future_dataframe(periods=365)
+forecast = m.predict(future)
+
+# Plot the forecast
+fig = m.plot(forecast)
+```
+
+### R
+
+```r
+library(prophet)
+
+# Load your data (must have 'ds' and 'y' columns)
+df <- read.csv('example_data.csv')
+
+# Create and fit the model
+m <- prophet(df)
+
+# Make future dataframe for predictions
+future <- make_future_dataframe(m, periods = 365)
+forecast <- predict(m, future)
+
+# Plot the forecast
+plot(m, forecast)
+```
+
+## Installation
 
 ## Installation in R - CRAN
 
@@ -124,6 +183,132 @@ Make sure compilers (gcc, g++, build-essential) and Python development tools (py
 ### Windows
 
 Using `cmdstanpy` with Windows requires a Unix-compatible C compiler such as mingw-gcc. If cmdstanpy is installed first, one can be installed via the `cmdstanpy.install_cxx_toolchain` command.
+
+## Building from Source
+
+### Python - Development Build
+
+To build Prophet from source and get the latest code changes:
+
+```bash
+# Clone the repository
+git clone https://github.com/facebook/prophet.git
+cd prophet/python
+
+# Install in editable mode
+python -m pip install -e .
+```
+
+**Note:** By default, Prophet will download and install a fixed version of `cmdstan`. To use your own existing `cmdstan` installation:
+
+```bash
+export PROPHET_REPACKAGE_CMDSTAN=False
+python -m pip install -e .
+```
+
+#### System Requirements
+
+**Linux:**
+- Compilers: `gcc`, `g++`, `build-essential`
+- Python development tools: `python-dev` or `python3-dev`
+- At least 4GB of memory for installation, 2GB for usage
+
+**Windows:**
+- Install [Rtools](http://cran.r-project.org/bin/windows/Rtools/) for compilers
+- Unix-compatible C compiler (e.g., mingw-gcc)
+
+### R - Development Build
+
+```bash
+# Clone the repository
+git clone https://github.com/facebook/prophet.git
+
+# Install from local source
+R -e 'install.packages("remotes")'
+R -e 'remotes::install_local("prophet/R")'
+```
+
+Or install directly from GitHub:
+
+```r
+install.packages('remotes')
+remotes::install_github('facebook/prophet@*release', subdir = 'R')
+```
+
+## Docker Usage
+
+Prophet includes Docker support for easy setup and reproducible environments.
+
+### Building the Docker Image
+
+```bash
+# Build the image using docker-compose
+make build
+
+# Or use docker-compose directly
+docker-compose build
+```
+
+### Running Prophet in Docker
+
+```bash
+# Start an interactive Python shell with Prophet installed
+make py-shell
+
+# Or start a bash shell in the container
+make shell
+
+# Using docker-compose directly
+docker-compose run package ipython
+docker-compose run package bash
+```
+
+### Docker Image Details
+
+The Docker image is based on `python:3.7-stretch` and includes:
+- Prophet Python package with development dependencies
+- IPython for interactive sessions
+- All necessary build tools and compilers
+
+### Using Docker for Development
+
+1. **Mount your local code:**
+   ```bash
+   docker-compose run package bash
+   # Your code is mounted at /usr/src/app
+   ```
+
+2. **Run tests:**
+   ```bash
+   docker-compose run package pytest
+   ```
+
+3. **Run your forecasting scripts:**
+   ```bash
+   docker-compose run package python your_script.py
+   ```
+
+## Important Links
+
+- **Homepage:** https://facebook.github.io/prophet/
+- **Documentation:** https://facebook.github.io/prophet/docs/quick_start.html
+- **Issue Tracker:** https://github.com/facebook/prophet/issues
+- **Source Code:** https://github.com/facebook/prophet
+- **Contributing:** [CONTRIBUTING.md](CONTRIBUTING.md)
+- **Architecture:** [ARCHITECTURE.md](ARCHITECTURE.md)
+- **Prophet R package:** https://cran.r-project.org/package=prophet
+- **Prophet Python package:** https://pypi.python.org/pypi/prophet/
+- **Release Blogpost:** https://research.facebook.com/blog/2017/2/prophet-forecasting-at-scale/
+- **Prophet Paper:** Sean J. Taylor, Benjamin Letham (2018) Forecasting at scale. The American Statistician 72(1):37-45 (https://peerj.com/preprints/3190.pdf)
+
+## Contributing
+
+We welcome contributions to Prophet! Please see our [CONTRIBUTING.md](CONTRIBUTING.md) guide for:
+- How to report bugs and request features
+- Development setup and workflow
+- Code style guidelines
+- How to submit pull requests
+- Running tests
 
 ## Changelog
 

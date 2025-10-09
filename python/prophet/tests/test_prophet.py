@@ -255,6 +255,16 @@ class TestProphetDataPrep:
 
         assert len(future) == train.shape[0] + 3
 
+    def test_all_same_dates(self, backend):
+        """Test that an error is raised when all dates are the same."""
+        df = pd.DataFrame({
+            'ds': pd.to_datetime(['2020-01-01', '2020-01-01', '2020-01-01']),
+            'y': [1.0, 2.0, 3.0]
+        })
+        m = Prophet(stan_backend=backend)
+        with pytest.raises(ValueError, match='All dates in the data are the same'):
+            m.fit(df)
+
 class TestProphetTrendComponent:
     def test_invalid_growth_input(self, backend):
         msg = 'Parameter "growth" should be "linear", ' '"logistic" or "flat".'

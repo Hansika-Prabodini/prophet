@@ -500,35 +500,64 @@ def rolling_median_by_h(x, h, w, name):
     -------
     Dataframe with columns horizon and name, the rolling median of x.
     """
-    # Aggregate over h
+    # Convert to numpy arrays for efficient operations
+    x = np.asarray(x)
+    h = np.asarray(h)
+    
+    # Create a DataFrame and sort by horizon
     df = pd.DataFrame({'x': x, 'h': h})
-    grouped = df.groupby('h')
-    df2 = grouped.size().reset_index().sort_values('h')
-    hs = df2['h']
-
+    df = df.sort_values('h').reset_index(drop=True)
+    
+    # Pre-compute all values grouped by horizon in a single pass
+    # This is much more efficient than repeated get_group() calls
+    grouped = df.groupby('h', sort=False)
+    h_groups = {h_val: group['x'].values for h_val, group in grouped}
+    
+    # Get unique horizons in sorted order
+    unique_h = df['h'].unique()
+    
+    # Pre-build sorted arrays for efficient lookup
+    sorted_x = df['x'].values
+    sorted_h = df['h'].values
+    
     res_h = []
     res_x = []
+    
+    # Build index mapping to avoid repeated np.where calls
+    # For each unique horizon, find where it starts in the sorted array
+    h_start_idx = {}
+    current_idx = 0
+    for h_val in unique_h:
+        h_start_idx[h_val] = current_idx
+        current_idx += len(h_groups[h_val])
+    
     # Start from the right and work backwards
-    i = len(hs) - 1
-    while i >= 0:
-        h_i = hs[i]
-        xs = grouped.get_group(h_i).x.tolist()
-
-        # wrap in array so this works if h is pandas Series with custom index or numpy array
-        next_idx_to_add = np.array(h == h_i).argmax() - 1
+    for i in range(len(unique_h) - 1, -1, -1):
+        h_i = unique_h[i]
+        
+        # Get values for this horizon (already computed)
+        xs = h_groups[h_i].tolist()
+        
+        # Get the starting index for this horizon
+        first_idx = h_start_idx[h_i]
+        
+        # Add previous values if needed
+        next_idx_to_add = first_idx - 1
         while (len(xs) < w) and (next_idx_to_add >= 0):
-            # Include points from the previous horizon. All of them if still
-            # less than w, otherwise just enough to get to w.
-            xs.append(x[next_idx_to_add])
+            xs.append(sorted_x[next_idx_to_add])
             next_idx_to_add -= 1
+        
         if len(xs) < w:
-            # Ran out of points before getting enough.
+            # Ran out of points before getting enough
             break
-        res_h.append(hs[i])
+        
+        res_h.append(h_i)
         res_x.append(np.median(xs))
-        i -= 1
+    
+    # Reverse to get ascending order
     res_h.reverse()
     res_x.reverse()
+    
     return pd.DataFrame({'horizon': res_h, name: res_x})
 
 

@@ -5,6 +5,13 @@
 # LICENSE file in the root directory of this source tree. An additional grant
 # of patent rights can be found in the PATENTS file in the same directory.
 from prophet.forecaster import Prophet
+from prophet.exceptions import (
+    ProphetError,
+    ModelNotFittedError,
+    DataValidationError,
+    ModelConfigurationError,
+    ModelAlreadyFittedError,
+)
 
 from pathlib import Path
 about = {}
@@ -12,3 +19,13 @@ here = Path(__file__).parent.resolve()
 with open(here / "__version__.py", "r") as f:
     exec(f.read(), about)
 __version__ = about["__version__"]
+
+__all__ = [
+    'Prophet',
+    'ProphetError',
+    'ModelNotFittedError',
+    'DataValidationError',
+    'ModelConfigurationError',
+    'ModelAlreadyFittedError',
+    '__version__',
+]

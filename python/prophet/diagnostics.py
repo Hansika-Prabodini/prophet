@@ -458,6 +458,9 @@ def rolling_mean_by_h(x, h, w, name):
     n_sum = 0
     # We don't know output size but it is bounded by len(df2)
     res_x = np.empty(len(df2))
+    
+    # Track the rightmost index in the current window
+    right_i = len(df2) - 1
 
     # Start from the right and work backwards
     for i in range(len(df2) - 1, -1, -1):
@@ -468,9 +471,10 @@ def rolling_mean_by_h(x, h, w, name):
             # less than w, otherwise weight the mean by the difference
             excess_n = n_sum - w
             excess_x = excess_n * xs[i] / ns[i]
-            res_x[trailing_i] = (x_sum - excess_x)/ w
-            x_sum -= xs[trailing_i]
-            n_sum -= ns[trailing_i]
+            res_x[trailing_i] = (x_sum - excess_x) / w
+            x_sum -= xs[right_i]
+            n_sum -= ns[right_i]
+            right_i -= 1
             trailing_i -= 1
 
     res_h = hs[(trailing_i + 1):]

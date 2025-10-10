@@ -7,7 +7,7 @@
 from __future__ import absolute_import, division, print_function
 from abc import abstractmethod, ABC
 from dataclasses import dataclass
-from typing import Sequence, Tuple
+from typing import Sequence, Tuple, Union
 from collections import OrderedDict
 from enum import Enum
 import importlib_resources
@@ -185,12 +185,15 @@ class CmdStanPyBackend(IStanBackend):
         )
         if 'chains' not in kwargs:
             kwargs['chains'] = default_chains
+        chains = kwargs['chains']
         
-        # Split samples between warmup and sampling
-        iter_half = samples // 2
-        kwargs['iter_sampling'] = iter_half
+        # Split samples between warmup and sampling across chains
+        # Ensure that the total number of post-warmup draws across all chains is approximately `samples`
+        # and that both warmup and sampling have at least one iteration.
+        per_chain_half = max(1, samples // (2 * chains))
+        kwargs['iter_sampling'] = per_chain_half
         if 'iter_warmup' not in kwargs:
-            kwargs['iter_warmup'] = iter_half
+            kwargs['iter_warmup'] = per_chain_half
         args.update(kwargs)
 
         self.stan_fit = self.model.sample(**args)
@@ -215,7 +218,7 @@ class CmdStanPyBackend(IStanBackend):
         import cmdstanpy
         
         if hasattr(self, "stan_fit") and self.stan_fit is not None:
-            fit_result: cmdstanpy.CmdStanMLE | cmdstanpy.CmdStanMCMC = self.stan_fit
+            fit_result: Union[cmdstanpy.CmdStanMLE, cmdstanpy.CmdStanMCMC] = self.stan_fit
             to_remove = (
                 fit_result.runset.csv_files + 
                 fit_result.runset.diagnostic_files + 
@@ -230,7 +233,6 @@ class CmdStanPyBackend(IStanBackend):
                     except OSError as e:
                         logger.warning(f'Failed to remove temporary file {fpath}: {e}')
                 
-    @staticmethod
     @staticmethod
     def sanitize_custom_inits(default_inits, custom_inits):
         """Validate that custom inits have the correct type and shape, otherwise use defaults.
@@ -275,6 +277,7 @@ class CmdStanPyBackend(IStanBackend):
         Returns:
             Tuple of (initialization dict, data dict) formatted for cmdstanpy
         """
+        X_val = data['X'].to_numpy() if hasattr(data['X'], 'to_numpy') else data['X']
         cmdstanpy_data = {
             'T': data['T'],
             'S': data['S'],
@@ -287,8 +290,8 @@ class CmdStanPyBackend(IStanBackend):
             't_change': data['t_change'].tolist(),
             's_a': data['s_a'].tolist(),
             's_m': data['s_m'].tolist(),
-            'X': data['X'].to_numpy().tolist(),
-            'sigmas': data['sigmas']
+            'X': X_val.tolist(),
+            'sigmas': data['sigmas'].tolist()
         }
 
         cmdstanpy_init = {

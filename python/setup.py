@@ -73,6 +73,8 @@ def maybe_install_cmdstan_toolchain() -> bool:
             # older versions
             from cmdstanpy.install_cxx_toolchain import main as run_rtools_install
 
+        rtools_version = os.environ.get("PROPHET_RTOOLS_VERSION", None)
+        rtools_dir = os.environ.get("PROPHET_RTOOLS_DIR", None)
         run_rtools_install({"version": None, "dir": None, "verbose": True})
         cmdstanpy.utils.cxx_toolchain_path()
         return True

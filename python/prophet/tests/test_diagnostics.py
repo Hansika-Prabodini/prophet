@@ -326,6 +326,39 @@ class TestPerformanceMetrics:
         assert np.allclose(np.array([7.0]), df["horizon"].values)
         assert np.allclose(np.array([4.5]), df["x"].values)
 
+    def test_mdape_with_non_default_index(self):
+        """Test that mdape function handles DataFrames with non-default indices correctly.
+        
+        This test verifies the bug fix where mdape was passing df['horizon'] 
+        instead of df['horizon'].values to rolling_median_by_h, which was
+        inconsistent with all other metric functions.
+        """
+        # Create a cross-validation style dataframe with non-default index
+        df_cv = pd.DataFrame({
+            'y': np.array([10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0]),
+            'yhat': np.array([9.5, 10.8, 12.2, 12.9, 14.1, 15.3, 15.8, 17.2]),
+            'horizon': pd.to_timedelta([1, 1, 2, 2, 3, 3, 4, 4], unit='D'),
+            'cutoff': pd.date_range('2020-01-01', periods=8),
+        })
+        # Set a non-default index to expose potential issues
+        df_cv.index = pd.RangeIndex(start=100, stop=108, step=1)
+        
+        # Test with different window sizes
+        for w in [1, 2, 4]:
+            result = diagnostics.mdape(df_cv, w)
+            # Result should have horizon and mdape columns
+            assert 'horizon' in result.columns
+            assert 'mdape' in result.columns
+            # Values should be finite and non-negative
+            assert np.all(np.isfinite(result['mdape']))
+            assert np.all(result['mdape'] >= 0)
+        
+        # Test with w=-1 (no rolling window)
+        result_no_window = diagnostics.mdape(df_cv, -1)
+        assert len(result_no_window) == len(df_cv)
+        assert 'horizon' in result_no_window.columns
+        assert 'mdape' in result_no_window.columns
+
 
 class TestProphetCopy:
     @pytest.fixture(scope="class")

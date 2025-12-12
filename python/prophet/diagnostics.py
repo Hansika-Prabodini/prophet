@@ -665,7 +665,7 @@ def mdape(df, w):
     if w < 0:
         return pd.DataFrame({'horizon': df['horizon'], 'mdape': ape})
     return rolling_median_by_h(
-        x=ape.values, h=df['horizon'], w=w, name='mdape'
+        x=ape.values, h=df['horizon'].values, w=w, name='mdape'
     )
 
 

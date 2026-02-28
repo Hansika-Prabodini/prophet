@@ -290,8 +290,13 @@ def prophet_copy(m, cutoff=None):
         changepoints = m.changepoints
         if cutoff is not None:
             # Filter change points '< cutoff'
-            last_history_date = max(m.history['ds'][m.history['ds'] <= cutoff])
-            changepoints = changepoints[changepoints < last_history_date]
+            history_before_cutoff = m.history['ds'][m.history['ds'] <= cutoff]
+            if len(history_before_cutoff) > 0:
+                last_history_date = max(history_before_cutoff)
+                changepoints = changepoints[changepoints < last_history_date]
+            else:
+                # No history before cutoff, so no changepoints should be kept
+                changepoints = pd.Series(pd.to_datetime([]), name='ds')
     else:
         changepoints = None
 
